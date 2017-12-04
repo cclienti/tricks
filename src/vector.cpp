@@ -1,6 +1,7 @@
 #include <cstddef>
 #include <cstring>
 #include <iostream>
+#include <utility>
 
 
 template<typename T>
@@ -46,6 +47,21 @@ public:
 			// order to initialize the previously allocated memory.
 			new (dst+i) T(v[i]);
 		}
+	}
+
+	/**
+	 * Move constructor
+	 */
+	Vector(Vector<T> &&v):
+		m_capacity(v.m_capacity),
+		m_size(v.m_size),
+		m_array(v.m_array)
+	{
+		// Resetting all values of v to properly delete the object.
+		v.m_capacity = 0;
+		v.m_size = 0;
+		v.m_array = nullptr;
+		std::cerr << "move ctor" << std::endl;
 	}
 
 	/**
@@ -95,7 +111,7 @@ public:
 		if(capacity > m_capacity) {
 			m_capacity = capacity;
 
-			// The old array were already allocated, so we just need to
+			// The old array was already allocated, so we just need to
 			// memcopy bytes in the new memory chunk. Because we used a
 			// builtin type to allocate the memory chunk, freeing it
 			// won't call the destructor of each array element. The
@@ -227,6 +243,7 @@ int main(void) {
 
 	v2x2.push_back(v1);
 	v2x2.push_back(v2);
+	v2x2.push_back(v3);
 
 	for(const auto &vline: v2x2) {
 		for(const auto &v: vline) {
@@ -234,6 +251,15 @@ int main(void) {
 		}
 		std::cout << std::endl;
 	}
+
+	//--------------------------------------
+	Vector<int> v2p (std::move(v2));
+	v2p.push_back(10);
+
+	for(const auto &v: v2p) {
+		std::cout << v << " ";
+	}
+	std::cout << std::endl;
 
 	return 0;
 }

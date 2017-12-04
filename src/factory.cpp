@@ -6,6 +6,7 @@
 class ManufacturedBase
 {
 public:
+	virtual ~ManufacturedBase() {};
 	virtual ManufacturedBase* clone() const = 0;
 	virtual void whoami() const = 0;
 };
@@ -18,7 +19,7 @@ private:
 	FactoryMap m_map;
 
 public:
-	~Factory() {
+	virtual ~Factory() {
 		FactoryMap::iterator it = m_map.begin();
 		for(; it != m_map.end(); ++it) {
 			if (it->second) {
@@ -51,24 +52,24 @@ public:
 
 
 class Car: public ManufacturedBase {
-	ManufacturedBase* clone() const
+	virtual ManufacturedBase* clone() const
 	{
-		new Car;
+		return new Car;
 	}
 
-	void whoami() const
+	virtual void whoami() const
 	{
 		std::cout << "Car" << std::endl;
 	}
 };
 
 class Truck: public ManufacturedBase {
-	ManufacturedBase* clone() const
+	virtual ManufacturedBase* clone() const
 	{
-		new Truck;
+		return new Truck;
 	}
 
-	void whoami() const
+	virtual void whoami() const
 	{
 		std::cout << "truck" << std::endl;
 	}
@@ -85,8 +86,8 @@ int main(void)
 	ManufacturedBase *a = factory.create("Car");
 	ManufacturedBase *b = factory.create("Truck");
 
-	a->whoami();
 	b->whoami();
+	a->whoami();
 
 	delete a;
 	delete b;
