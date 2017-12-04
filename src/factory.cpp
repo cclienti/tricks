@@ -88,5 +88,8 @@ int main(void)
 	a->whoami();
 	b->whoami();
 
+	delete a;
+	delete b;
+
 	return 0;
 }
