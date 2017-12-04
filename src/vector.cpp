@@ -7,78 +7,162 @@ template<typename T>
 class Vector
 {
 public:
+	typedef T* iterator;
+	typedef const T* const_iterator;
+
+	/**
+	 * Default constructor
+	 */
 	Vector():
 		m_capacity(1),
 		m_size(0),
 		m_array(nullptr)
 	{
+		// The array allocated is just a chunk of data without any
+		// initialization. Allocating builtin types with the new
+		// operator leaves the memory uninitialized. We have just built
+		// a kind of memory pool.
 		m_array = new char [m_capacity*sizeof(T)];
 	}
 
+	/**
+	 * Copy constructor
+	 */
 	Vector(const Vector<T> &v):
 		m_capacity(v.capacity()),
 		m_size(v.size()),
 		m_array(nullptr)
 	{
+		// Allocating a chunk of data without initialization (See
+		// default ctor).
 		m_array = new char [m_capacity*sizeof(T)];
 
+		// We cast the memory chunk to the appropriate pointer type.
+		T* dst = reinterpret_cast<T*>(m_array);
+
+		// We copy the content
 		for(std::size_t i=0; i<m_size; ++i) {
-			new (m_array + i*sizeof(T)) T(v[i]);
+			// We use the placement new to call the copy ctor of "v" in
+			// order to initialize the previously allocated memory.
+			new (dst+i) T(v[i]);
 		}
 	}
 
-	~Vector()
+	/**
+	 * Destructor
+	 */
+	virtual ~Vector()
 	{
-		if(m_array) {
-			T* dst = reinterpret_cast<T*>(m_array);
-			for(std::size_t i=0; i<m_size; ++i) {
-				dst[i].~T();
-			}
-			delete [] m_array;
+		// Before freeing the memory, we must call each element's
+		// destructor.
+		T* dst = reinterpret_cast<T*>(m_array);
+		for(std::size_t i=0; i<m_size; ++i) {
+			dst[i].~T();
 		}
+
+		// Then we can free the memory chunk.
+		delete [] m_array;
 	}
 
-	void push_back(const T &value)
+	/**
+	 * Append a value in the vector. If the vector is full a new chunk
+	 * will be allocated by doubling the current capacity. Then the old
+	 * content is copied in the new one.
+	 *
+	 * @sa reserve
+	 */
+	virtual void push_back(const T &value)
 	{
-		if(m_size == m_capacity) {
-			reserve(capacity()*2);
+		// If the size is more or equal to the current capacity, we must
+		// reserve a bigger memory chunk.
+		if(m_size >= m_capacity) {
+			reserve(m_capacity*2);
 		}
 
+		// Call the copy ctor to append the new element. This is done by
+		// using the placement new op.
 		T* dst = reinterpret_cast<T*>(m_array);
 		new (dst + m_size++) T(value);
 	}
 
-	void reserve(std::size_t capacity)
+	/**
+	 * Reserve a new memory chunk to store vector's elements. If the
+	 * given capacity is less or equal than the current capacity, it
+	 * won't do anything.
+	 */
+	virtual void reserve(std::size_t capacity)
 	{
 		if(capacity > m_capacity) {
 			m_capacity = capacity;
 
-			char * tmp = m_array;
-			T* tmp_v = reinterpret_cast<T*>(tmp);
-
+			// The old array were already allocated, so we just need to
+			// memcopy bytes in the new memory chunk. Because we used a
+			// builtin type to allocate the memory chunk, freeing it
+			// won't call the destructor of each array element. The
+			// memcopy is safe in this case.
+			char * old = m_array;
 			m_array = new char [m_capacity*sizeof(T)];
-
-			for(std::size_t i=0, k=0; i<m_size; ++i, k+=sizeof(T)) {
-				new (m_array + k) T(tmp_v[i]);
-				tmp_v[i].~T();
-			}
-
-			delete [] tmp;
+			std::memcpy(m_array, old, m_size*sizeof(T));
+			delete [] old;
 		}
 	}
 
-	T & operator[](std::size_t index) const
+	/**
+	 * Begin iterator.
+	 */
+	virtual iterator begin() const
+	{
+		T* dst = reinterpret_cast<T*>(m_array);
+		return dst;
+	}
+
+	/**
+	 * Begin const_iterator.
+	 */
+	virtual const_iterator cbegin() const
+	{
+		return begin();
+	}
+
+	/**
+	 * End iterator.
+	 */
+	virtual iterator end() const
+	{
+		T* dst = reinterpret_cast<T*>(m_array);
+		return dst+m_size;
+	}
+
+	/**
+	 * End const_iterator.
+	 */
+	virtual const_iterator cend() const
+	{
+		return end();
+	}
+
+	/**
+	 * Return the element stored at the given index. No out of bounds
+	 * check is done here.
+	 */
+	virtual T & operator[](std::size_t index) const
 	{
 		T* dst = reinterpret_cast<T*>(m_array);
 		return dst[index];
 	}
 
-	std::size_t size() const
+	/**
+	 * Return the number of elements stored in the vector.
+	 */
+	virtual std::size_t size() const
 	{
 		return m_size;
 	}
 
-	std::size_t capacity() const
+	/**
+	 * Return the capacity (in term of number of elements) of the vector.
+	 */
+	virtual std::size_t capacity() const
 	{
 		return m_capacity;
 	}
@@ -90,6 +174,10 @@ private:
 };
 
 
+
+/**
+ * A small test case
+ */
 int main(void) {
 	//---------------------------------------
 	std::cout << "Vector 1 Test" << std::endl;
@@ -104,6 +192,11 @@ int main(void) {
 	}
 	std::cout << std::endl;
 
+	for(const auto &v: v1) {
+		std::cout << v << " ";
+	}
+	std::cout << std::endl;
+
 	//---------------------------------------
 	std::cout << "Vector 2 Test" << std::endl;
 	Vector<int> v2;
@@ -113,8 +206,8 @@ int main(void) {
 	v2.push_back(7);
 	v2.push_back(8);
 
-	for(std::size_t s=0; s<v2.size(); s++) {
-		std::cout << v2[s] << " ";
+	for(const auto &v: v2) {
+		std::cout << v << " ";
 	}
 	std::cout << std::endl;
 
@@ -122,8 +215,9 @@ int main(void) {
 	std::cout << "Vector 3 Test" << std::endl;
 	Vector<int> v3(v2);
 	v2.push_back(9);
-	for(std::size_t s=0; s<v3.size(); s++) {
-		std::cout << v3[s] << " ";
+
+	for(const auto &v: v3) {
+		std::cout << v << " ";
 	}
 	std::cout << std::endl;
 
@@ -134,9 +228,9 @@ int main(void) {
 	v2x2.push_back(v1);
 	v2x2.push_back(v2);
 
-	for(std::size_t s=0; s<v2x2.size(); s++) {
-		for(std::size_t t=0; t<v2x2[s].size(); t++) {
-			std::cout << v2x2[s][t] << " ";
+	for(const auto &vline: v2x2) {
+		for(const auto &v: vline) {
+			std::cout << v << " ";
 		}
 		std::cout << std::endl;
 	}
