@@ -38,13 +38,7 @@ public:
 private:
 	void to_dot_recurse(std::ostream &os) const
 	{
-		if(get_left()) {
-			std::cout << "\t" << get_data() << "->" << get_left()->get_data() << ";" << std::endl;
-		}
-
-		if (get_right()) {
-			std::cout << "\t" << get_data() << "->" << get_right()->get_data() << ";" << std::endl;
-		}
+		std::cout << "\tp" << reinterpret_cast<uint64_t>(this) << " [label=<" << get_data() << ">];" << std::endl;
 
 		if(get_left()) {
 			get_left()->to_dot_recurse(os);
@@ -52,6 +46,18 @@ private:
 
 		if(get_right()) {
 			get_right()->to_dot_recurse(os);
+		}
+
+		if(get_left()) {
+			std::cout << "\t"
+			          << "p" << reinterpret_cast<uint64_t>(this) << " -> "
+			          << "p" << reinterpret_cast<uint64_t>(get_left()) << ';' << std::endl;
+		}
+
+		if (get_right()) {
+			std::cout << "\t"
+			          << "p" << reinterpret_cast<uint64_t>(this) << " -> "
+			          << "p" << reinterpret_cast<uint64_t>(get_right()) << ';' << std::endl;
 		}
 	}
 
@@ -66,7 +72,7 @@ template<class T>
 class Tree
 {
 public:
-	Tree(Node<T> *head) :
+	Tree(Node<T> *head=nullptr) :
 		m_head (head)
 	{}
 
@@ -80,12 +86,12 @@ public:
 		if(m_head) {
 			m_head->to_dot(graph_name);
 		}
-		std::cerr << "tree depth: " << tree_depth(m_head);
 	}
 
-	void push(const T &value)
+	Tree<T> &push(const T &value)
 	{
-
+		m_head = push_recurse(m_head, value);
+		return *this;
 	}
 
 private:
@@ -110,13 +116,63 @@ private:
 		}
 	}
 
+	Node<T> *push_recurse(Node<T> *node, const T &value) const
+	{
+		if (node == nullptr) {
+			return new Node<T>(value);
+		}
+
+		Node<T> *left = node->get_left();
+		Node<T> *right = node->get_right();
+
+		if(value < node->get_data()) {
+			node->set_left(push_recurse(left, value));
+		}
+		else {
+			node->set_right(push_recurse(right, value));
+		}
+
+		int diff = tree_depth(right) - tree_depth(left);
+		switch(diff) {
+		case 2:
+			{
+				int diff_right = tree_depth(right->get_right()) - tree_depth(right->get_left());
+				switch(diff_right) {
+				case 1: return rotate_left(node);
+				case -1: return rotate_right_left(node);
+				default: break;
+				}
+			}
+			break;
+
+		case -2:
+			{
+				int diff_left = tree_depth(left->get_right()) - tree_depth(left->get_left());
+				switch(diff_left) {
+				case 1: return rotate_right(node);
+				case -1: return rotate_left_right(node);
+				default: break;
+				}
+			}
+			break;
+
+		default: break;
+		}
+
+		return node;
+	}
+
 	Node<T> *rotate_left(Node<T> *node) const
 	{
+		// Case where the node has a sub-tree depth difference of 2 and
+		// the right son a difference of 1.
+		//
 		//  from:   Y         to:    X
 		//         / \              / \
 		//        a   X            Y   c
-		//           / \          / \
+		//           / \          / \  c
 		//          b   c        a   b
+		//              c
 
 		Node<T> *Y = node;
 		Node<T> *X = Y->get_right();
@@ -134,11 +190,15 @@ private:
 
 	Node<T> *rotate_right(Node<T> *node) const
 	{
+		// Case where the node has a sub-tree depth difference of -2 and
+		// the left son a difference of -1.
+		//
 		// from:    Y      to:    X
 		//         / \		       / \
 		//        X   c		   a   Y
-		//       / \			      / \
+		//       / \			   a  / \
 		//      a   b		        b   c
+		//      a
 
 		Node<T> *Y = node;
 		Node<T> *X = Y->get_left();
@@ -156,13 +216,17 @@ private:
 
 	Node<T> *rotate_right_left(Node<T> *node) const
 	{
+		// Case where the node has a sub-tree depth difference of 2 and
+		// the right son a difference of -1.
+		//
 		// from:    Z      to:    X
 		//         / \		 	   /   \
 		//        a   Y	     Z     Y
 		//           / \      / \   / \
 		//          X   d    a   b c   d
- 		//         / \
-		//        a   b
+ 		//         / \           b
+		//        b   c
+		//        b
 
 		node->set_right(rotate_right(node->get_right()));
 		return rotate_left(node);
@@ -170,13 +234,17 @@ private:
 
 	Node<T> *rotate_left_right(Node<T> *node) const
 	{
+		// Case where the node has a subtree depth difference of -2 and
+		// the left son a difference of 1.
+		//
 		// from:    Z      to:    X
 		//         / \          /   \
       //        Y   d        Y     Z
 		//       / \          / \   / \
 		//      a   X        a   b c   d
-		//         / \
+		//         / \             c
 		//        b   c
+		//            c
 
 		node->set_left(rotate_left(node->get_left()));
 		return rotate_right(node);
@@ -196,7 +264,10 @@ int main() {
 	root->get_left()->set_left(new Node<int>(4));
 	root->get_left()->set_right(new Node<int>(5));
 
-	Tree<int> tree(root);
+	Tree<int> tree;
+	tree.push(0).push(2).push(4).push(6).push(5).push(5).push(7);
+	tree.push(20).push(30).push(40).push(10);
+
 	tree.to_dot();
 
 	return 0;
