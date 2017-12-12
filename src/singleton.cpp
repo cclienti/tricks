@@ -40,9 +40,9 @@ public:
 		// variable is being initialized, the concurrent execution shall
 		// wait for completion of the initialization.`
 		//
-      static Singleton singleton;
-      return singleton;
-   }
+		static Singleton singleton;
+		return singleton;
+	}
 
 	static void log(std::string info) {
 		auto t0 = std::chrono::system_clock::now();
