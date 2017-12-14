@@ -14,8 +14,10 @@ public:
 	/**
 	 * Node constructor.
 	 */
-	Node(const T &data) :
+	Node(const T &data, Node *parent=nullptr) :
 		m_data(data),
+		m_depth(1),
+		m_parent(parent),
 		m_left(nullptr),
 		m_right(nullptr)
 	{}
@@ -29,6 +31,67 @@ public:
 	 * Change the node's payload.
 	 */
 	void set_data(T &data) {m_data = data;}
+
+	/**
+	 * Return the depth of the node.
+	 */
+	std::size_t get_depth() const {return m_depth;}
+
+	/**
+	 * Change the depth's of the node.
+	 */
+	void set_depth(std::size_t depth) {m_depth = depth;}
+
+	/**
+	 * Increment the depth.
+	 */
+	void inc_depth() {++m_depth;}
+
+	/**
+	 * Decrement the depth.
+	 */
+	void dec_depth() {--m_depth;}
+
+	/**
+	 * Return the difference of sub-nodes depth.
+	 */
+	int64_t get_depth_diff() const {
+		int64_t ld = 0, rd = 0;
+
+		if (m_left)
+			ld = m_left->get_depth();
+
+		if (m_right)
+			rd = m_right->get_depth();
+
+		return rd - ld;
+	}
+
+	/**
+	 * Update the depth value by checking left and right depth. (no
+	 * recursion).
+	 */
+	void update_depth() {
+		std::size_t ld = 0, rd = 0;
+
+		if (m_left)
+			ld = m_left->get_depth();
+
+		if (m_right)
+			rd = m_right->get_depth();
+
+		set_depth(std::max(ld, rd) + 1);
+	}
+
+	/**
+	 * Return the parent of the node.
+	 */
+	Node *get_parent() const {return m_parent;}
+
+	/**
+	 * Change the parent of the node.
+	 */
+	void set_parent(Node *parent) {m_parent = parent;}
 
 	/**
 	 * Return the left's sub-node.
@@ -102,6 +165,8 @@ private:
 
 private:
 	T m_data;
+	std::size_t m_depth;
+	Node *m_parent;
 	Node *m_left;
 	Node *m_right;
 };
@@ -127,6 +192,7 @@ public:
 	~AVLTree()
 	{
 		delete_recurse(m_head);
+		m_head = nullptr;
 	}
 
 	/**
@@ -147,7 +213,13 @@ public:
 	 */
 	AVLTree<T> &push(const T &value)
 	{
-		m_head = push_recurse(m_head, value);
+		if (m_head) {
+			push_recurse(m_head, value);
+		}
+		else {
+			m_head = new Node<T>(value);
+		}
+
 		return *this;
 	}
 
@@ -176,20 +248,18 @@ private:
 		}
 	}
 
-	/**
-	 * Return the depth of the given node.
-	 */
-	std::size_t tree_depth(Node<T> *node) const
-	{
-		if (node) {
-			std::size_t left_depth = tree_depth(node->get_left());
-			std::size_t right_depth = tree_depth(node->get_right());
-			return std::max(left_depth, right_depth) + 1;
-		}
-		else {
-			return 0;
-		}
-	}
+	// /**
+	//  * Return the depth of the given node.
+	//  */
+	// std::size_t tree_depth(Node<T> *node) const
+	// {
+	// 	if (node) {
+	// 		return node->get_depth();
+	// 	}
+	// 	else {
+	// 		return 0;
+	// 	}
+	// }
 
 	/**
 	 * Push the value by recursively searching for the right place in
@@ -211,55 +281,36 @@ private:
 	 *   difference and the left son a -1 difference.
 	 *
 	 */
-	Node<T> *push_recurse(Node<T> *node, const T &value) const
+	void push_recurse(Node<T> *node, const T &value) const
 	{
-		if (node == nullptr) {
-			return new Node<T>(value);
-		}
-
 		Node<T> *left = node->get_left();
 		Node<T> *right = node->get_right();
 
 		if(value < node->get_data()) {
-			node->set_left(push_recurse(left, value));
+			if (left == nullptr) {
+				left = new Node<T>(value, node);
+				node->set_left(left);
+			}
+			else {
+				push_recurse(left, value);
+			}
 		}
 		else {
-			node->set_right(push_recurse(right, value));
+			if (right == nullptr) {
+				right = new Node<T>(value, node);
+				node->set_right(right);
+			}
+			else {
+				push_recurse(right, value);
+			}
 		}
 
-		int diff = tree_depth(right) - tree_depth(left);
-		switch(diff) {
-		case 2:
-			{
-				int diff_right = tree_depth(right->get_right()) - tree_depth(right->get_left());
-				switch(diff_right) {
-				case  1: return rotate_left(node);
-				case -1: return rotate_right_left(node);
-				default: break;
-				}
-			}
-			break;
-
-		case -2:
-			{
-				int diff_left = tree_depth(left->get_right()) - tree_depth(left->get_left());
-				switch(diff_left) {
-				case  1: return rotate_right(node);
-				case -1: return rotate_left_right(node);
-				default: break;
-				}
-			}
-			break;
-
-		default: break;
-		}
-
-		return node;
+		node->update_depth();
 	}
 
 	/**
 	 * Search for the largest node. Mark to nullptr the parent that
-	 * points to it and returns the pointer to the largest node.
+	 * points to it and return the pointer to the largest node.
 	 */
 	Node<T> *remove_largest(Node<T> *node) const
 	{
@@ -269,7 +320,7 @@ private:
 
 		Node<T> *right = node->get_right();
 
-		if(right == nullptr) {
+		if(!right) {
 			return node;
 		}
 
@@ -301,30 +352,49 @@ private:
 			// replace it within the found node. Then the tree has to be
 			// balanced from the current node to the root during the
 			// recursion unwinding.
+
 			if(!right && !left) {
 				// Node is a leaf, we delete it.
 				delete node;
 				return nullptr;
 			}
 			else if(right && !left) {
-				Node<T> *rnode = remove_largest(node);
-				T data = rnode->get_data();
+				// Node has only a right sub-node. The tree is an AVL, so
+				// the depth of this sub-node is 1. We can safely remove
+				// the right node.
+				T data = right->get_data();
 				node->set_data(data);
-				delete rnode;
+				node->set_right(nullptr);
+				delete right;
 			}
 			else {
 				Node<T> *rnode = remove_largest(node->get_left());
 				T data = rnode->get_data();
+				std::cerr << "DEBUG: " << data << std::endl;
 				node->set_data(data);
+				if(left == rnode)	node->set_left(rnode->get_left());
 				delete rnode;
 			}
 		}
 
-		int diff = tree_depth(right) - tree_depth(left);
+		return balance_tree(node);
+	}
+
+	/**
+	 * Balance the tree. Call the right rotation depending on the
+	 * sub-nodes depth.
+	 */
+	Node<T> *balance_tree(Node<T> *node) const {
+		if (!node) return nullptr;
+
+		Node<T> *left = node->get_left();
+		Node<T> *right = node->get_right();
+
+		int64_t diff = node->get_depth_diff();
 		switch(diff) {
 		case 2:
 			{
-				int diff_right = tree_depth(right->get_right()) - tree_depth(right->get_left());
+				int64_t diff_right = right->get_depth_diff();
 				switch(diff_right) {
 				case  1: return rotate_left(node);
 				case -1: return rotate_right_left(node);
@@ -335,7 +405,7 @@ private:
 
 		case -2:
 			{
-				int diff_left = tree_depth(left->get_right()) - tree_depth(left->get_left());
+				int64_t diff_left = left->get_depth_diff();
 				switch(diff_left) {
 				case  1: return rotate_right(node);
 				case -1: return rotate_left_right(node);
@@ -349,7 +419,6 @@ private:
 
 		return node;
 	}
-
 
 	/**
 	 * Left rotation
@@ -366,7 +435,7 @@ private:
 	 */
 	Node<T> *rotate_left(Node<T> *node) const
 	{
-
+		Node<T> *parent = node->get_parent();
 		Node<T> *Y = node;
 		Node<T> *X = Y->get_right();
 		Node<T> *a = Y->get_left();
@@ -377,6 +446,14 @@ private:
 		Y->set_right(b);
 		X->set_right(c);
 		X->set_left(Y);
+
+		X->set_parent(parent);
+		Y->set_parent(X);
+		b->set_parent(Y);
+		c->set_parent(X);
+
+		Y->update_depth();
+		X->update_depth();
 
 		return X;
 	}
@@ -396,6 +473,7 @@ private:
 	 */
 	Node<T> *rotate_right(Node<T> *node) const
 	{
+		Node<T> *parent = node->get_parent();
 		Node<T> *Y = node;
 		Node<T> *X = Y->get_left();
 		Node<T> *a = X->get_left();
@@ -406,6 +484,14 @@ private:
 		Y->set_left(b);
 		Y->set_right(c);
 		X->set_right(Y);
+
+		X->set_parent(parent);
+		Y->set_parent(X);
+		b->set_parent(Y);
+		c->set_parent(Y);
+
+		Y->update_depth();
+		X->update_depth();
 
 		return X;
 	}
@@ -461,10 +547,10 @@ private:
 
 int main() {
 	AVLTree<int> tree;
-	tree.push(0).push(2).push(4).push(6).push(5).push(5).push(7);
-	tree.push(20).push(30).push(40).push(10);
+	tree.push(50).push(30).push(60).push(10).push(70).push(40).push(50);
+	tree.push(45).push(0).push(14).push(18);
 
-	tree.remove(6);
+	//tree.remove(60);
 
 	tree.to_dot();
 
