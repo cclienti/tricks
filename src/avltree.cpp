@@ -1,3 +1,11 @@
+/**
+ * This is a sample program to show how AVL tree works.
+ *
+ * To check results using Graphviz, launch using the following command:
+ *
+ *     $ ./avltree | xdot -
+ */
+
 #include <cstddef>
 #include <cstring>
 #include <cassert>
@@ -14,6 +22,11 @@ class Node
 {
 public:
 	/**
+	 * Default Node constructor.
+	 */
+	Node() : m_depth(1), m_left(nullptr), m_right(nullptr) {}
+
+	/**
 	 * Node constructor.
 	 */
 	Node(const T &data, Node *parent=nullptr) :
@@ -24,6 +37,13 @@ public:
 	{}
 
 	/**
+	 * Node destructor. The destructor must not free left or right.
+	 * sub-nodes. During remove operation, child of removed node must
+	 * not be deleted.
+	 */
+	~Node() {}
+
+	/**
 	 * Return the node payload.
 	 */
 	const T &get_data() const {return m_data;}
@@ -31,7 +51,7 @@ public:
 	/**
 	 * Change the node's payload.
 	 */
-	void set_data(T &data) {m_data = data;}
+	void set_data(const T &data) {m_data = data;}
 
 	/**
 	 * Return the depth of the node.
@@ -99,10 +119,10 @@ public:
 	 * (Graphviz).
 	 */
 	void to_dot(std::ostream &os, const std::string &graph_name="to_dot") const {
-		std::cout << "digraph " << graph_name << " {\n"
-		          << "\tnode [shape=circle];\n\n"
-		          << *this
-		          << "}" << std::endl;
+		os << "digraph " << graph_name << " {\n"
+		   << "\tnode [shape=circle];\n\n"
+			<< *this
+		   << "}" << std::endl;
 	}
 
 private:
@@ -122,13 +142,19 @@ private:
 	 */
 	void to_dot_recurse(std::ostream &os) const
 	{
-		std::cout << "\tp" << reinterpret_cast<uint64_t>(this) << " ["
-		          << "label=< "
-		          << "<TABLE BORDER=\"0\">\n"
-		          << "\t\t<TR><TD colspan=\"2\"><FONT POINT-SIZE=\"36\"><b>" << get_data() << "</b></FONT></TD></TR>\n"
-		          << "\t\t<TR><TD colspan=\"2\"><FONT POINT-SIZE=\"24\">" << get_depth() << " / Δ:" << get_depth_diff() << "</FONT></TD></TR>\n"
-		          << "\t\t<TR><TD PORT=\"left\">LEFT</TD>" << "<TD PORT=\"right\">RIGHT</TD></TR>\n"
-		          << "\t\t</TABLE>" << " >];" << std::endl;
+		std::string error;
+		if (std::abs(get_depth_diff()) > 1) {
+			error = " bgcolor=\"#FF0000\"";
+		}
+
+		os << "\tp" << reinterpret_cast<uint64_t>(this) << " ["
+		   << "label=< "
+		   << "<TABLE BORDER=\"0\""<< error << ">\n"
+		   << "\t\t<TR><TD colspan=\"2\"><FONT POINT-SIZE=\"36\"><b>" << get_data() << "</b></FONT></TD></TR>\n"
+		   << "\t\t<TR><TD colspan=\"2\"><FONT POINT-SIZE=\"24\">" << get_depth()
+		   << " / Δ:" << get_depth_diff() << "</FONT></TD></TR>\n"
+		   << "\t\t<TR><TD PORT=\"left\">LEFT</TD>" << "<TD PORT=\"right\">RIGHT</TD></TR>\n"
+		   << "\t\t</TABLE>" << " >];" << std::endl;
 
 		if(get_left()) {
 			get_left()->to_dot_recurse(os);
@@ -178,8 +204,9 @@ public:
 	 */
 	~AVLTree()
 	{
-		delete_recurse(m_head);
-		m_head = nullptr;
+		if(m_head) {
+			delete_recurse(m_head);
+		}
 	}
 
 	/**
@@ -211,9 +238,15 @@ public:
 	AVLTree<T> &remove(const T &value)
 	{
 		m_head = remove_recurse(m_head, value);
-		m_head->update_depth();
-		m_head = balance_tree(m_head);
 		return *this;
+	}
+
+	/**
+	 * Check if the tree violates the AVL property. Return the number
+	 * of errors found.
+	 */
+	std::size_t check() const {
+		return check_recurse(m_head);
 	}
 
 
@@ -458,7 +491,7 @@ private:
 	 */
 	Node<T> *remove_largest(Node<T> *node) const
 	{
-		if (node == nullptr) {
+		if (!node) {
 			return nullptr;
 		}
 
@@ -473,6 +506,8 @@ private:
 			node->set_right(nullptr);
 		}
 
+		node->update_depth();
+
 		return rnode;
 	}
 
@@ -484,15 +519,17 @@ private:
 	{
 		Node<T> *left = node->get_left();
 		Node<T> *right = node->get_right();
-		const T& data = node->get_data();
+		const T &data = node->get_data();
 
 		if(value < data) {
-			if(left)
+			if(left) {
 				node->set_left(remove_recurse(left, value));
+			}
 		}
 		else if(value > data) {
-			if(right)
+			if(right) {
 				node->set_right(remove_recurse(right, value));
+			}
 		}
 		else if (value == data) {
 			// We must find the largest payload of the left sub-nodes and
@@ -500,34 +537,46 @@ private:
 			// balanced from the current node to the root during the
 			// recursion unwinding.
 
-			if(!right && !left) {
+			if(!left && !right) {
 				// Node is a leaf, we just delete it.
 				delete node;
 				return nullptr;
 			}
-			else if(right && !left) {
+			else if(!left && right) {
 				// Node has only a right sub-node. The tree is an AVL, so
 				// the depth of this sub-node is 1. We can safely remove
 				// the right node.
-				T data = right->get_data();
-				node->set_data(data);
 				node->set_right(nullptr);
+				node->set_data(right->get_data());
 				delete right;
 			}
 			else {
-				Node<T> *rnode = remove_largest(node->get_left());
-				T data = rnode->get_data();
-				node->set_data(data);
-				if(left == rnode)	node->set_left(rnode->get_left());
+				Node<T> *rnode = remove_largest(left);
+				node->set_data(rnode->get_data());
+				if(rnode == left) node->set_left(rnode->get_left());
 				delete rnode;
 			}
-
-			return balance_tree(node);
 		}
 
-		return node;
+		// We must keep the tree balanced during the recursion
+		// unwinding.
+		node->update_depth();
+		return balance_tree(node);
 	}
 
+	std::size_t check_recurse(Node<T> *node) const {
+		if (!node) return 0;
+
+		std::size_t l=0, r=0;
+		if(node->get_left()) {
+			l = check_recurse(node->get_left());
+		}
+		if(node->get_right()) {
+			r = check_recurse(node->get_right());
+		}
+
+		return l + r + (std::abs(node->get_depth_diff()) >= 2);
+	}
 
 private:
 	Node<T> *m_head;
@@ -545,9 +594,12 @@ int main() {
 
 	tree.remove(250).remove(239).remove(254).remove(229).remove(236);
 	tree.remove(226).remove(211).remove(229).remove(198);
-
 	tree.remove(263);
-	tree.remove(-1);
+	//tree.remove(-1);
+
 	tree.to_dot();
+
+	std::cerr << "Checking error in tree: " << tree.check() << std::endl;
+
 	return 0;
 }

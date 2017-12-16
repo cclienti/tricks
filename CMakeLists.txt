@@ -3,7 +3,7 @@ project(tricks)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS 1)
 
-set(CMAKE_CXX_FLAGS "-g3 -std=c++14")
+set(CMAKE_CXX_FLAGS "-g -std=c++14")
 
 file(GLOB SOURCES src/*.cpp)
 
