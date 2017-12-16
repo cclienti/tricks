@@ -1,5 +1,6 @@
 #include <cstddef>
 #include <cstring>
+#include <cassert>
 #include <cstdlib>
 #include <iostream>
 #include <ostream>
@@ -408,6 +409,8 @@ private:
 			}
 		}
 
+		assert(std::abs(node->get_depth_diff())<=1);
+
 		return node;
 	}
 
@@ -481,21 +484,24 @@ private:
 	{
 		Node<T> *left = node->get_left();
 		Node<T> *right = node->get_right();
+		const T& data = node->get_data();
 
-		if(value < node->get_data()) {
-			node->set_left(remove_recurse(left, value));
+		if(value < data) {
+			if(left)
+				node->set_left(remove_recurse(left, value));
 		}
-		else if(value > node->get_data()) {
-			node->set_right(remove_recurse(right, value));
+		else if(value > data) {
+			if(right)
+				node->set_right(remove_recurse(right, value));
 		}
-		else {
+		else if (value == data) {
 			// We must find the largest payload of the left sub-nodes and
 			// replace it within the found node. Then the tree has to be
 			// balanced from the current node to the root during the
 			// recursion unwinding.
 
 			if(!right && !left) {
-				// Node is a leaf, we delete it.
+				// Node is a leaf, we just delete it.
 				delete node;
 				return nullptr;
 			}
@@ -515,9 +521,11 @@ private:
 				if(left == rnode)	node->set_left(rnode->get_left());
 				delete rnode;
 			}
+
+			return balance_tree(node);
 		}
 
-		return balance_tree(node);
+		return node;
 	}
 
 
@@ -532,9 +540,14 @@ int main() {
 
 	AVLTree<int> tree;
 	for(std::size_t i=0; i<100;i++) {
-		tree.push((std::rand() % 100));
+		tree.push((std::rand() % 500));
 	}
 
+	tree.remove(250).remove(239).remove(254).remove(229).remove(236);
+	tree.remove(226).remove(211).remove(229).remove(198);
+
+	tree.remove(263);
+	tree.remove(-1);
 	tree.to_dot();
 	return 0;
 }
