@@ -1,5 +1,6 @@
 #include <cstddef>
 #include <cstring>
+#include <cstdlib>
 #include <iostream>
 #include <ostream>
 
@@ -17,7 +18,6 @@ public:
 	Node(const T &data, Node *parent=nullptr) :
 		m_data(data),
 		m_depth(1),
-		m_parent(parent),
 		m_left(nullptr),
 		m_right(nullptr)
 	{}
@@ -41,16 +41,6 @@ public:
 	 * Change the depth's of the node.
 	 */
 	void set_depth(std::size_t depth) {m_depth = depth;}
-
-	/**
-	 * Increment the depth.
-	 */
-	void inc_depth() {++m_depth;}
-
-	/**
-	 * Decrement the depth.
-	 */
-	void dec_depth() {--m_depth;}
 
 	/**
 	 * Return the difference of sub-nodes depth.
@@ -84,16 +74,6 @@ public:
 	}
 
 	/**
-	 * Return the parent of the node.
-	 */
-	Node *get_parent() const {return m_parent;}
-
-	/**
-	 * Change the parent of the node.
-	 */
-	void set_parent(Node *parent) {m_parent = parent;}
-
-	/**
 	 * Return the left's sub-node.
 	 */
 	Node *get_left() const {return m_left;}
@@ -118,9 +98,10 @@ public:
 	 * (Graphviz).
 	 */
 	void to_dot(std::ostream &os, const std::string &graph_name="to_dot") const {
-		std::cout << "digraph " << graph_name << " {" << std::endl;
-		std::cout << *this;
-		std::cout << "}" << std::endl;
+		std::cout << "digraph " << graph_name << " {\n"
+		          << "\tnode [shape=circle];\n\n"
+		          << *this
+		          << "}" << std::endl;
 	}
 
 private:
@@ -140,7 +121,13 @@ private:
 	 */
 	void to_dot_recurse(std::ostream &os) const
 	{
-		std::cout << "\tp" << reinterpret_cast<uint64_t>(this) << " [label=<" << get_data() << ">];" << std::endl;
+		std::cout << "\tp" << reinterpret_cast<uint64_t>(this) << " ["
+		          << "label=< "
+		          << "<TABLE BORDER=\"0\">\n"
+		          << "\t\t<TR><TD colspan=\"2\"><FONT POINT-SIZE=\"36\"><b>" << get_data() << "</b></FONT></TD></TR>\n"
+		          << "\t\t<TR><TD colspan=\"2\"><FONT POINT-SIZE=\"24\">" << get_depth() << " / Δ:" << get_depth_diff() << "</FONT></TD></TR>\n"
+		          << "\t\t<TR><TD PORT=\"left\">LEFT</TD>" << "<TD PORT=\"right\">RIGHT</TD></TR>\n"
+		          << "\t\t</TABLE>" << " >];" << std::endl;
 
 		if(get_left()) {
 			get_left()->to_dot_recurse(os);
@@ -152,13 +139,13 @@ private:
 
 		if(get_left()) {
 			std::cout << "\t"
-			          << "p" << reinterpret_cast<uint64_t>(this) << " -> "
+			          << "p" << reinterpret_cast<uint64_t>(this) << ":left -> "
 			          << "p" << reinterpret_cast<uint64_t>(get_left()) << ';' << std::endl;
 		}
 
 		if (get_right()) {
 			std::cout << "\t"
-			          << "p" << reinterpret_cast<uint64_t>(this) << " -> "
+			          << "p" << reinterpret_cast<uint64_t>(this) << ":right -> "
 			          << "p" << reinterpret_cast<uint64_t>(get_right()) << ';' << std::endl;
 		}
 	}
@@ -166,7 +153,6 @@ private:
 private:
 	T m_data;
 	std::size_t m_depth;
-	Node *m_parent;
 	Node *m_left;
 	Node *m_right;
 };
@@ -213,13 +199,7 @@ public:
 	 */
 	AVLTree<T> &push(const T &value)
 	{
-		if (m_head) {
-			push_recurse(m_head, value);
-		}
-		else {
-			m_head = new Node<T>(value);
-		}
-
+		m_head = push_recurse(m_head, value);
 		return *this;
 	}
 
@@ -230,6 +210,8 @@ public:
 	AVLTree<T> &remove(const T &value)
 	{
 		m_head = remove_recurse(m_head, value);
+		m_head->update_depth();
+		m_head = balance_tree(m_head);
 		return *this;
 	}
 
@@ -248,18 +230,186 @@ private:
 		}
 	}
 
-	// /**
-	//  * Return the depth of the given node.
-	//  */
-	// std::size_t tree_depth(Node<T> *node) const
-	// {
-	// 	if (node) {
-	// 		return node->get_depth();
-	// 	}
-	// 	else {
-	// 		return 0;
-	// 	}
-	// }
+	/**
+	 * Left rotation
+	 *
+	 * The node has a 2 sub-tree depth difference and
+	 * the right son a 1 difference.
+	 *
+	 *      from:   Y         to:    X
+	 *             / \              / \
+	 *            a   X            Y   c
+	 *               / \          / \  c
+	 *              b   c        a   b
+	 *                  c
+	 */
+	Node<T> *rotate_left(Node<T> *node) const
+	{
+		Node<T> *Y = node;
+		Node<T> *X = Y->get_right();
+		Node<T> *a = Y->get_left();
+		Node<T> *b = X->get_left();
+		Node<T> *c = X->get_right();
+
+		Y->set_left(a);
+		Y->set_right(b);
+		Y->update_depth();
+
+		X->set_right(c);
+		X->set_left(Y);
+		X->update_depth();
+
+		return X;
+	}
+
+	/**
+	 * Right rotation
+	 *
+	 * The node has a -2 sub-tree depth difference and
+	 * the left son a -1 difference.
+	 *
+	 *      from:    Y      to:   X
+	 *              / \          / \
+	 *             X   c        a   Y
+	 *            / \           a  / \
+	 *           a   b            b   c
+	 *           a
+	 */
+	Node<T> *rotate_right(Node<T> *node) const
+	{
+		Node<T> *Y = node;
+		Node<T> *X = Y->get_left();
+		Node<T> *a = X->get_left();
+		Node<T> *b = X->get_right();
+		Node<T> *c = Y->get_right();
+
+		Y->set_left(b);
+		Y->set_right(c);
+		Y->update_depth();
+
+		X->set_right(a);
+		X->set_right(Y);
+		X->update_depth();
+
+		return X;
+	}
+
+	/**
+	 * Right left double rotation
+	 *
+	 * The node has a 2 sub-tree depth difference and
+	 * the right son a -1 difference.
+	 *
+	 *      from:    Z      to:    X
+	 *              / \          /   \
+	 *             a   Y        Z     Y
+	 *                / \      / \   / \
+	 *               X   d    a   b c   d
+	 *              / \           b
+	 *             b   c
+	 *             b
+	 */
+	Node<T> *rotate_right_left(Node<T> *node) const
+	{
+		Node<T> *Z = node;
+		Node<T> *Y = Z->get_right();
+		Node<T> *X = Y->get_left();
+		Node<T> *a = Z->get_left();
+		Node<T> *b = X->get_left();
+		Node<T> *c = X->get_right();
+		Node<T> *d = Y->get_right();
+
+		Z->set_left(a);
+		Z->set_right(b);
+		Z->update_depth();
+
+		Y->set_left(c);
+		Y->set_right(d);
+		Y->update_depth();
+
+		X->set_left(Z);
+		X->set_right(Y);
+		X->update_depth();
+
+		return X;
+	}
+
+	/**
+	 *
+	 * Left right double rotation
+	 *
+	 * The node has a -2 subtree depth difference and
+	 * the left son a 1 difference.
+	 *
+	 *     from:    Z      to:    X
+	 *             / \          /   \
+	 *            Y   d        Y     Z
+	 *           / \          / \   / \
+	 *          a   X        a   b c   d
+	 *             / \             c
+	 *            b   c
+	 *                c
+	 */
+	Node<T> *rotate_left_right(Node<T> *node) const
+	{
+		Node<T> *Z = node;
+		Node<T> *Y = Z->get_left();
+		Node<T> *X = Y->get_right();
+		Node<T> *a = Y->get_left();
+		Node<T> *b = X->get_left();
+		Node<T> *c = X->get_right();
+		Node<T> *d = Z->get_right();
+
+		Y->set_left(a);
+		Y->set_right(b);
+		Y->update_depth();
+
+		Z->set_left(c);
+		Z->set_right(d);
+		Z->update_depth();
+
+		X->set_left(Y);
+		X->set_right(Z);
+		X->update_depth();
+
+		return X;
+	}
+
+	/**
+	 * Balance the tree. Call the right rotation depending on the
+	 * sub-nodes depth.
+	 */
+	Node<T> *balance_tree(Node<T> *node) const {
+		if (!node) return nullptr;
+
+		int64_t diff = node->get_depth_diff();
+		if (diff < -1) {
+			Node<T> *left = node->get_left();
+			if (left) {
+				int64_t diff_left = left->get_depth_diff();
+				if(diff_left <= 0) {
+					return rotate_right(node);
+				}
+				else {
+					return rotate_left_right(node);
+				}
+			}
+		}
+		else if (diff > 1) {
+			Node<T> *right = node->get_right();
+			if (right) {
+				int64_t diff_right = right->get_depth_diff();
+				if(diff_right >= 0) {
+					return rotate_left(node);
+				}
+				else {
+					return rotate_right_left(node);
+				}
+			}
+		}
+
+		return node;
+	}
 
 	/**
 	 * Push the value by recursively searching for the right place in
@@ -281,31 +431,22 @@ private:
 	 *   difference and the left son a -1 difference.
 	 *
 	 */
-	void push_recurse(Node<T> *node, const T &value) const
+	Node<T> *push_recurse(Node<T> *node, const T &value) const
 	{
-		Node<T> *left = node->get_left();
-		Node<T> *right = node->get_right();
+		if (node == nullptr) {
+			return new Node<T>(value, node);
+		}
 
 		if(value < node->get_data()) {
-			if (left == nullptr) {
-				left = new Node<T>(value, node);
-				node->set_left(left);
-			}
-			else {
-				push_recurse(left, value);
-			}
+			node->set_left(push_recurse(node->get_left(), value));
 		}
 		else {
-			if (right == nullptr) {
-				right = new Node<T>(value, node);
-				node->set_right(right);
-			}
-			else {
-				push_recurse(right, value);
-			}
+			node->set_right(push_recurse(node->get_right(), value));
 		}
 
 		node->update_depth();
+
+		return balance_tree(node);
 	}
 
 	/**
@@ -370,7 +511,6 @@ private:
 			else {
 				Node<T> *rnode = remove_largest(node->get_left());
 				T data = rnode->get_data();
-				std::cerr << "DEBUG: " << data << std::endl;
 				node->set_data(data);
 				if(left == rnode)	node->set_left(rnode->get_left());
 				delete rnode;
@@ -380,164 +520,6 @@ private:
 		return balance_tree(node);
 	}
 
-	/**
-	 * Balance the tree. Call the right rotation depending on the
-	 * sub-nodes depth.
-	 */
-	Node<T> *balance_tree(Node<T> *node) const {
-		if (!node) return nullptr;
-
-		Node<T> *left = node->get_left();
-		Node<T> *right = node->get_right();
-
-		int64_t diff = node->get_depth_diff();
-		switch(diff) {
-		case 2:
-			{
-				int64_t diff_right = right->get_depth_diff();
-				switch(diff_right) {
-				case  1: return rotate_left(node);
-				case -1: return rotate_right_left(node);
-				default: break;
-				}
-			}
-			break;
-
-		case -2:
-			{
-				int64_t diff_left = left->get_depth_diff();
-				switch(diff_left) {
-				case  1: return rotate_right(node);
-				case -1: return rotate_left_right(node);
-				default: break;
-				}
-			}
-			break;
-
-		default: break;
-		}
-
-		return node;
-	}
-
-	/**
-	 * Left rotation
-	 *
-	 * The node has a 2 sub-tree depth difference and
-	 * the right son a 1 difference.
-	 *
-	 *      from:   Y         to:    X
-	 *             / \              / \
-	 *            a   X            Y   c
-	 *               / \          / \  c
-	 *              b   c        a   b
-	 *                  c
-	 */
-	Node<T> *rotate_left(Node<T> *node) const
-	{
-		Node<T> *parent = node->get_parent();
-		Node<T> *Y = node;
-		Node<T> *X = Y->get_right();
-		Node<T> *a = Y->get_left();
-		Node<T> *b = X->get_left();
-		Node<T> *c = X->get_right();
-
-		Y->set_left(a);
-		Y->set_right(b);
-		X->set_right(c);
-		X->set_left(Y);
-
-		X->set_parent(parent);
-		Y->set_parent(X);
-		b->set_parent(Y);
-		c->set_parent(X);
-
-		Y->update_depth();
-		X->update_depth();
-
-		return X;
-	}
-
-	/**
-	 * Right rotation
-	 *
-	 * The node has a -2 sub-tree depth difference and
-	 * the left son a -1 difference.
-	 *
-	 *      from:    Y      to:   X
-	 *              / \          / \
-	 *             X   c        a   Y
-	 *            / \           a  / \
-	 *           a   b            b   c
-	 *           a
-	 */
-	Node<T> *rotate_right(Node<T> *node) const
-	{
-		Node<T> *parent = node->get_parent();
-		Node<T> *Y = node;
-		Node<T> *X = Y->get_left();
-		Node<T> *a = X->get_left();
-		Node<T> *b = X->get_right();
-		Node<T> *c = Y->get_right();
-
-		X->set_right(a);
-		Y->set_left(b);
-		Y->set_right(c);
-		X->set_right(Y);
-
-		X->set_parent(parent);
-		Y->set_parent(X);
-		b->set_parent(Y);
-		c->set_parent(Y);
-
-		Y->update_depth();
-		X->update_depth();
-
-		return X;
-	}
-
-	/**
-	 * Right left double rotation
-	 *
-	 * The node has a 2 sub-tree depth difference and
-	 * the right son a -1 difference.
-	 *
-	 *      from:    Z      to:    X
-	 *              / \          /   \
-	 *             a   Y        Z     Y
-	 *                / \      / \   / \
-	 *               X   d    a   b c   d
-	 *              / \           b
-	 *             b   c
-	 *             b
-	 */
-	Node<T> *rotate_right_left(Node<T> *node) const
-	{
-		node->set_right(rotate_right(node->get_right()));
-		return rotate_left(node);
-	}
-
-	/**
-	 *
-	 * Left right double rotation
-	 *
-	 * The node has a -2 subtree depth difference and
-	 * the left son a -1 difference.
-	 *
-	 *     from:    Z      to:    X
-	 *             / \          /   \
-	 *            Y   d        Y     Z
-	 *           / \          / \   / \
-	 *          a   X        a   b c   d
-	 *             / \             c
-	 *            b   c
-	 *                c
-	 */
-	Node<T> *rotate_left_right(Node<T> *node) const
-	{
-		node->set_left(rotate_left(node->get_left()));
-		return rotate_right(node);
-	}
 
 private:
 	Node<T> *m_head;
@@ -546,13 +528,13 @@ private:
 
 
 int main() {
-	AVLTree<int> tree;
-	tree.push(50).push(30).push(60).push(10).push(70).push(40).push(50);
-	tree.push(45).push(0).push(14).push(18);
+	std::srand(0);
 
-	//tree.remove(60);
+	AVLTree<int> tree;
+	for(std::size_t i=0; i<100;i++) {
+		tree.push((std::rand() % 100));
+	}
 
 	tree.to_dot();
-
 	return 0;
 }
