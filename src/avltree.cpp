@@ -488,8 +488,9 @@ private:
 	/**
 	 * Search for the largest node. Mark to nullptr the parent that
 	 * points to it and return the pointer to the largest node.
+	 * Balance the tree during the recursion unwinding.
 	 */
-	Node<T> *remove_largest(Node<T> *node) const
+	Node<T> *remove_largest(Node<T> *parent, Node<T> *node) const
 	{
 		if (!node) {
 			return nullptr;
@@ -501,12 +502,18 @@ private:
 			return node;
 		}
 
-		Node<T> *rnode = remove_largest(right);
+		Node<T> *rnode = remove_largest(node, right);
 		if (rnode == right) {
 			node->set_right(nullptr);
 		}
 
 		node->update_depth();
+
+		if (parent->get_left() == node)
+			parent->set_left(balance_tree(node));
+
+		if (parent->get_right() == node)
+			parent->set_right(balance_tree(node));
 
 		return rnode;
 	}
@@ -551,7 +558,7 @@ private:
 				delete right;
 			}
 			else {
-				Node<T> *rnode = remove_largest(left);
+				Node<T> *rnode = remove_largest(node, left);
 				node->set_data(rnode->get_data());
 				if(rnode == left) node->set_left(rnode->get_left());
 				delete rnode;
@@ -593,13 +600,19 @@ int main() {
 	}
 
 	tree.remove(250).remove(239).remove(254).remove(229).remove(236);
-	tree.remove(226).remove(211).remove(229).remove(198);
-	tree.remove(263);
-	//tree.remove(-1);
-
+	tree.remove(226).remove(211).remove(229).remove(198).remove(178);
+	tree.remove(263).remove(190);
+	std::cerr << "Checking error in tree: " << tree.check() << std::endl;
 	tree.to_dot();
 
-	std::cerr << "Checking error in tree: " << tree.check() << std::endl;
+	for(std::size_t i=0; i<500;i++) {
+		tree.remove(i);
+		std::size_t errors = tree.check();
+		if (errors) {
+			std::cerr << "Checking error in tree: " << errors << std::endl;
+		}
+	}
+
 
 	return 0;
 }
