@@ -492,19 +492,15 @@ private:
 	 */
 	Node<T> *remove_largest(Node<T> *parent, Node<T> *node) const
 	{
-		if (!node) {
-			return nullptr;
-		}
-
 		Node<T> *right = node->get_right();
+		Node<T> *rnode;
 
 		if(!right) {
+			parent->set_right(node->get_left());
 			return node;
 		}
-
-		Node<T> *rnode = remove_largest(node, right);
-		if (rnode == right) {
-			node->set_right(nullptr);
+		else {
+			rnode = remove_largest(node, right);
 		}
 
 		node->update_depth();
@@ -558,10 +554,15 @@ private:
 				delete right;
 			}
 			else {
-				Node<T> *rnode = remove_largest(node, left);
-				node->set_data(rnode->get_data());
-				if(rnode == left) node->set_left(rnode->get_left());
-				delete rnode;
+				if (!left->get_right()) {
+					node->set_left(left->get_left());
+					delete left;
+				}
+				else {
+					Node<T> *rnode = remove_largest(node, left);
+					node->set_data(rnode->get_data());
+					delete rnode;
+				}
 			}
 		}
 
@@ -605,14 +606,16 @@ int main() {
 	std::cerr << "Checking error in tree: " << tree.check() << std::endl;
 	tree.to_dot();
 
+	std::size_t total_errors = 0;
 	for(std::size_t i=0; i<500;i++) {
 		tree.remove(i);
 		std::size_t errors = tree.check();
 		if (errors) {
 			std::cerr << "Checking error in tree: " << errors << std::endl;
 		}
+		total_errors += errors;
 	}
 
 
-	return 0;
+	return total_errors;
 }
